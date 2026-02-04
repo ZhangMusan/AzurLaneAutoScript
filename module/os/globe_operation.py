@@ -252,15 +252,16 @@ class GlobeOperation(ActionPointHandler):
                     for fallback_type in types:
                         select_name = 'SELECT_' + fallback_type
                         if select_name in name_to_button:
-                            button = name_to_button[select_name]
-                            logger.info(f'Fallback to type {fallback_type}: {button.name}')
+                            button = get_button([name_to_button[select_name]])
+                            logger.info(f'Fallback to type {fallback_type}: {button.name if button else select_name}')
                             break
                     # 如果按 types 优先级没找到，才取第一个
                     if button is None:
-                        first = selection[0]
-                        if hasattr(first, 'name'):
-                            button = first
-                            logger.info(f'Fallback to first available type: {button.name}')
+                        button = get_button([selection[0]])
+                        if not button:
+                            logger.warning('Failed to resolve button from first available selection')
+                            return False
+                        logger.info(f'Fallback to first available type: {button.name}')
                 else:
                     logger.warning('No zone type selection available')
                     return False
