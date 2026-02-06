@@ -91,6 +91,11 @@ Event:
     - Hospital
     - StopCondition
     - Emotion
+    HospitalEvent:
+    - Scheduler
+    - HospitalEvent
+    - StopCondition
+    - Emotion
     Coalition:
     - Scheduler
     - Campaign
