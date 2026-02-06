@@ -1661,8 +1661,10 @@ OpsiScheduling:
       - true
       - false
     OperationCoinsPreserve:
+      type: input
       value: 100000
     ActionPointPreserve:
+      type: input
       value: 500
 IslandSeasonTask:
   TaskDict:
