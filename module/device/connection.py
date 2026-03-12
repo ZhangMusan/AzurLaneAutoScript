@@ -2,6 +2,7 @@ import ipaddress
 import json
 import logging
 import re
+import shlex
 import socket
 import subprocess
 import time
@@ -253,19 +254,127 @@ class Connection(ConnectionAttr):
         if not isinstance(cmd, str):
             cmd = list(map(str, cmd))
 
+        if isinstance(cmd, str):
+            cmdline = cmd
+        else:
+            cmdline = ' '.join(shlex.quote(x) for x in cmd)
+
         if stream:
-            result = self.u2.shell(cmd, stream=stream, timeout=timeout)
-            # Already received all, so `recvall` is ignored
+            result = self.u2.http.get(
+                '/shell/stream',
+                params={'command': cmdline},
+                timeout=None,
+                stream=True,
+                retry=False,
+            )
             result = remove_shell_warning(result.content)
             # bytes
             return result
         else:
-            result = self.u2.shell(cmd, stream=stream, timeout=timeout).output
+            result = self.u2.http.post(
+                '/shell',
+                data={'command': cmdline, 'timeout': str(timeout)},
+                timeout=timeout + 10,
+                retry=False,
+            )
+            if result.status_code != 200:
+                raise AdbError(f'http shell failed: status={result.status_code}, body={result.text}')
+            result = result.json().get('output', '')
             if rstrip:
                 result = result.rstrip()
             result = remove_shell_warning(result)
             # str
             return result
+
+    def _playcover_parse_host_port(self):
+        """
+        Returns:
+            tuple(str, int): host, port
+        """
+        res = re.match(r'^https?://([^:/]+):(\d+)$', self.serial)
+        if not res:
+            raise AdbError(f'Invalid PlayCover serial: {self.serial}')
+        return res.group(1), int(res.group(2))
+
+    def _playcover_open(self, timeout=5):
+        """
+        Open a PlayTools socket and complete MAA handshake.
+
+        Returns:
+            socket.socket
+        """
+        host, port = self._playcover_parse_host_port()
+        stream = socket.socket()
+        stream.settimeout(timeout)
+        stream.connect((host, port))
+        stream.sendall(b'MAA\x00')
+        signature = self._playcover_recv_exact(stream, 4)
+        if signature != b'OKAY':
+            stream.close()
+            raise AdbError(f'Invalid PlayTools handshake response: {signature!r}')
+        return stream
+
+    @staticmethod
+    def _playcover_recv_exact(stream, size):
+        data = b''
+        while len(data) < size:
+            chunk = stream.recv(size - len(data))
+            if not chunk:
+                raise AdbError(f'PlayTools EOF while waiting {size} bytes, got {len(data)}')
+            data += chunk
+        return data
+
+    def _playcover_check_version(self, stream):
+        stream.sendall(b'\x00\x04VERN')
+        version = int.from_bytes(self._playcover_recv_exact(stream, 4), 'big')
+        if version < 2:
+            raise AdbError(f'Unsupported PlayTools version: {version}')
+        return version
+
+    def playcover_screencap(self):
+        """
+        Returns:
+            tuple(int, int, bytes): width, height, RGBA raw buffer
+        """
+        stream = self._playcover_open()
+        try:
+            self._playcover_check_version(stream)
+
+            stream.sendall(b'\x00\x04SIZE')
+            size_data = self._playcover_recv_exact(stream, 4)
+            width = int.from_bytes(size_data[0:2], 'big')
+            height = int.from_bytes(size_data[2:4], 'big')
+
+            stream.sendall(b'\x00\x04SCRN')
+            image_size = int.from_bytes(self._playcover_recv_exact(stream, 4), 'big')
+            if image_size <= 0:
+                return width, height, b''
+
+            buffer = self._playcover_recv_exact(stream, image_size)
+            return width, height, buffer
+        finally:
+            stream.close()
+
+    def playcover_touch(self, phase, x, y):
+        """
+        Args:
+            phase (int): 0 began, 1 moved, 3 ended
+            x (int): x coordinate
+            y (int): y coordinate
+        """
+        x = max(0, min(65535, int(x)))
+        y = max(0, min(65535, int(y)))
+        phase = int(phase)
+
+        stream = self._playcover_open()
+        try:
+            self._playcover_check_version(stream)
+            payload = bytes([phase]) + x.to_bytes(2, 'big') + y.to_bytes(2, 'big')
+            stream.sendall(b'\x00\x09TUCH')
+            stream.sendall(payload)
+            return True
+        finally:
+            stream.close()
 
     def adb_getprop(self, name):
         """

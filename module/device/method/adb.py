@@ -174,6 +174,22 @@ class Adb(Connection):
     @retry
     @Config.when(DEVICE_OVER_HTTP=True)
     def screenshot_adb(self):
+        if self.is_playcover_maatools:
+            width, height, buffer = self.playcover_screencap()
+            if not buffer:
+                raise ImageTruncated(f'Empty PlayCover screenshot, size={width}x{height}')
+
+            expected_size = int(width * height * 4)
+            if len(buffer) != expected_size:
+                raise ImageTruncated(
+                    f'PlayCover screenshot size mismatch: got={len(buffer)}, expected={expected_size}'
+                )
+
+            image = np.frombuffer(buffer, dtype=np.uint8)
+            image = image.reshape(height, width, 4)
+            image = cv2.cvtColor(image, cv2.COLOR_RGBA2RGB)
+            return image
+
         data = self.adb_shell(['screencap'], stream=True)
         if len(data) < 500:
             logger.warning(f'Unexpected screenshot: {data}')
@@ -190,6 +206,11 @@ class Adb(Connection):
 
     @retry
     def click_adb(self, x, y):
+        if self.is_playcover_maatools:
+            self.playcover_touch(0, x, y)
+            self.playcover_touch(3, x, y)
+            return
+
         start = time.time()
         self.adb_shell(['input', 'tap', x, y])
         if time.time() - start <= 0.05:
@@ -197,6 +218,21 @@ class Adb(Connection):
 
     @retry
     def swipe_adb(self, p1, p2, duration=0.1):
+        if self.is_playcover_maatools:
+            x1, y1 = p1
+            x2, y2 = p2
+            points = max(2, int(duration * 60))
+
+            self.playcover_touch(0, x1, y1)
+            for i in range(1, points):
+                t = i / points
+                x = int(x1 + (x2 - x1) * t)
+                y = int(y1 + (y2 - y1) * t)
+                self.playcover_touch(1, x, y)
+                self.sleep(duration / points)
+            self.playcover_touch(3, x2, y2)
+            return
+
         duration = int(duration * 1000)
         self.adb_shell(['input', 'swipe', *p1, *p2, duration])
 

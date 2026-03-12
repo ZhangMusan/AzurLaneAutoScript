@@ -5,7 +5,7 @@ from module.device.method.adb import Adb
 from module.device.method.uiautomator_2 import Uiautomator2
 from module.device.method.utils import HierarchyButton
 from module.device.method.wsa import WSA
-from module.exception import ScriptError
+from module.exception import RequestHumanTakeover, ScriptError
 from module.logger import logger
 
 
@@ -15,13 +15,22 @@ class AppControl(Adb, WSA, Uiautomator2):
     _hierarchy_interval = Timer(0.1)
 
     def app_current(self) -> str:
+        if self.is_playcover_maatools:
+            # PlayCover does not expose adb shell `/shell` in ALAS-compatible form.
+            # Assume target app is managed externally by PlayCover container.
+            return self.package
+
         method = self.config.Emulator_ControlMethod
-        if self.is_wsa:
-            package = self.app_current_wsa()
-        elif method in AppControl._app_u2_family:
-            package = self.app_current_uiautomator2()
-        else:
-            package = self.app_current_adb()
+        try:
+            if self.is_wsa:
+                package = self.app_current_wsa()
+            elif method in AppControl._app_u2_family:
+                package = self.app_current_uiautomator2()
+            else:
+                package = self.app_current_adb()
+        except (RequestHumanTakeover, OSError, RuntimeError, Exception) as e:
+            logger.warning(f'Get current app failed, assume app is not running: {e}')
+            return ''
         package = package.strip(' \t\r\n')
         return package
 
@@ -31,22 +40,40 @@ class AppControl(Adb, WSA, Uiautomator2):
         return package == self.package
 
     def app_start(self):
+        if self.is_playcover_maatools:
+            logger.info('PlayCover mode: skip app_start, app lifecycle is controlled by container')
+            return
+
         method = self.config.Emulator_ControlMethod
         logger.info(f'App start: {self.package}')
-        if self.config.Emulator_Serial == 'wsa-0':
-            self.app_start_wsa(display=0)
-        elif method in AppControl._app_u2_family:
-            self.app_start_uiautomator2()
-        else:
-            self.app_start_adb()
+        try:
+            if self.config.Emulator_Serial == 'wsa-0':
+                self.app_start_wsa(display=0)
+            elif method in AppControl._app_u2_family:
+                self.app_start_uiautomator2()
+            else:
+                self.app_start_adb()
+        except (RequestHumanTakeover, Exception) as e:
+            logger.warning(f'App start fallback: {e}')
 
     def app_stop(self):
+        if self.is_playcover_maatools:
+            logger.info('PlayCover mode: skip app_stop, app lifecycle is controlled by container')
+            return
+
         method = self.config.Emulator_ControlMethod
         logger.info(f'App stop: {self.package}')
-        if method in AppControl._app_u2_family:
-            self.app_stop_uiautomator2()
-        else:
-            self.app_stop_adb()
+        try:
+            if method in AppControl._app_u2_family:
+                self.app_stop_uiautomator2()
+            else:
+                self.app_stop_adb()
+        except (RequestHumanTakeover, Exception) as e:
+            logger.warning(f'App stop fallback: {e}')
+
+    @staticmethod
+    def _empty_hierarchy() -> etree._Element:
+        return etree.fromstring(b'<hierarchy rotation="0"/>')
 
     def hierarchy_timer_set(self, interval=None):
         if interval is None:
@@ -71,10 +98,14 @@ class AppControl(Adb, WSA, Uiautomator2):
         self._hierarchy_interval.reset()
 
         method = self.config.Emulator_ControlMethod
-        if method in AppControl._app_u2_family:
-            self.hierarchy = self.dump_hierarchy_uiautomator2()
-        else:
-            self.hierarchy = self.dump_hierarchy_adb()
+        try:
+            if method in AppControl._app_u2_family:
+                self.hierarchy = self.dump_hierarchy_uiautomator2()
+            else:
+                self.hierarchy = self.dump_hierarchy_adb()
+        except (RequestHumanTakeover, RuntimeError, OSError, etree.XMLSyntaxError) as e:
+            logger.warning(f'Dump hierarchy failed, fallback to empty hierarchy: {e}')
+            self.hierarchy = self._empty_hierarchy()
         return self.hierarchy
 
     def xpath_to_button(self, xpath: str) -> HierarchyButton:

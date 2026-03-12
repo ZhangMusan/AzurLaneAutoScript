@@ -88,7 +88,6 @@ class ConnectionAttr:
         # 夜神模拟器 127.0.0.1:62001
         # MuMu模拟器12127.0.0.1:16384
         if '模拟' in serial:
-            import re
             res = re.search(r'(127\.\d+\.\d+\.\d+:\d+)', serial)
             if res:
                 serial = res.group(1)
@@ -96,6 +95,9 @@ class ConnectionAttr:
         serial = serial.replace('12127.0.0.1', '127.0.0.1')
         # auto127.0.0.1:16384
         serial = serial.replace('auto127.0.0.1', '127.0.0.1').replace('autoemulator', 'emulator')
+        # PlayCover MaaTools 默认暴露本地 HTTP 端点
+        if re.match(r'^(127\.0\.0\.1|localhost):171[78]$', serial):
+            serial = f'http://{serial}'
         return str(serial)
 
     def serial_check(self):
@@ -124,6 +126,8 @@ class ConnectionAttr:
                     self.config.Emulator_ScreenshotMethod = 'uiautomator2'
                     self.config.Emulator_ControlMethod = 'uiautomator2'
         if self.is_over_http:
+            if re.match(r'^https?://(127\.0\.0\.1|localhost):171[78]$', self.serial):
+                logger.warning('检测到 PlayCover MaaTools 连接模式')
             if self.config.Emulator_ScreenshotMethod not in ["ADB", "uiautomator2", "aScreenCap"] \
                     or self.config.Emulator_ControlMethod not in ["ADB", "uiautomator2", "minitouch"]:
                 logger.warning(
@@ -131,7 +135,10 @@ class ConnectionAttr:
                     f'ScreenshotMethod can only use ["ADB", "uiautomator2", "aScreenCap"], '
                     f'ControlMethod can only use ["ADB", "uiautomator2", "minitouch"]'
                 )
-                raise RequestHumanTakeover
+                logger.warning('Fallback ScreenshotMethod/ControlMethod to ADB for http device compatibility')
+                with self.config.multi_set():
+                    self.config.Emulator_ScreenshotMethod = 'ADB'
+                    self.config.Emulator_ControlMethod = 'ADB'
 
     @cached_property
     def is_bluestacks4_hyperv(self):
@@ -199,6 +206,10 @@ class ConnectionAttr:
     @cached_property
     def is_over_http(self):
         return bool(re.match(r"^https?://", self.serial))
+
+    @cached_property
+    def is_playcover_maatools(self):
+        return bool(re.match(r'^https?://(127\.0\.0\.1|localhost):171[78]$', self.serial))
 
     @cached_property
     def is_chinac_phone_cloud(self):
@@ -343,8 +354,9 @@ class ConnectionAttr:
             else:
                 device = u2.connect(self.serial)
 
-        # Stay alive
-        device.set_new_command_timeout(604800)
+        # 部分 HTTP 端点不完整支持 newCommandTimeout，跳过以避免误触发内部 adb 恢复逻辑
+        if not self.is_over_http:
+            device.set_new_command_timeout(604800)
 
         logger.attr('u2.Device', f'Device(atx_agent_url={device._get_atx_agent_url()})')
         return device
