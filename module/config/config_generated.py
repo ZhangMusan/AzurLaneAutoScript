@@ -780,6 +780,10 @@ class GeneratedConfig:
     Benchmark_DeviceType = 'emulator'  # emulator, plone_cloud_with_adb, phone_cloud_without_adb, android_phone, android_phone_vmos
     Benchmark_TestScene = 'screenshot_click'  # screenshot_click, screenshot, click
 
+    # Group `DockScan`
+    DockScan_PostProcess = True
+    DockScan_OutputFolder = './log/dock_scan'
+
     # Group `AzurLaneUncensored`
     AzurLaneUncensored_Repository = 'https://gitee.com/LmeSzinc/AzurLaneUncensored'
 

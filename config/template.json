@@ -2684,6 +2684,15 @@
       "Storage": {}
     }
   },
+  "DockScan": {
+    "DockScan": {
+      "PostProcess": true,
+      "OutputFolder": "./log/dock_scan"
+    },
+    "Storage": {
+      "Storage": {}
+    }
+  },
   "AzurLaneUncensored": {
     "AzurLaneUncensored": {
       "Repository": "https://gitee.com/LmeSzinc/AzurLaneUncensored"

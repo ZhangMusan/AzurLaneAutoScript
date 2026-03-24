@@ -322,6 +322,10 @@
       "name": "OCR性能测试",
       "help": ""
     },
+    "DockScan": {
+      "name": "船坞扫描",
+      "help": ""
+    },
     "AzurLaneUncensored": {
       "name": "反和谐",
       "help": ""
@@ -4848,6 +4852,20 @@
       "screenshot_click": "截图+点击速度测试",
       "screenshot": "截图速度测试",
       "click": "点击速度测试"
+    }
+  },
+  "DockScan": {
+    "_info": {
+      "name": "船坞扫描",
+      "help": "扫描当前船坞舰船信息，可选执行名称纠错并导出 CSV 文件"
+    },
+    "PostProcess": {
+      "name": "执行后处理导出",
+      "help": "启用后会自动纠正识别名称，并导出原始、清洗、匹配和报告 CSV"
+    },
+    "OutputFolder": {
+      "name": "导出目录",
+      "help": "扫描结果和 CSV 报表输出到该目录"
     }
   },
   "AzurLaneUncensored": {

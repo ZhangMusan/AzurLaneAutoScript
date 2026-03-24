@@ -628,6 +628,13 @@ class AzurLaneAutoScript:
         from module.daemon.ocr_benchmark import run_ocr_benchmark
         run_ocr_benchmark(config=self.config)
 
+    def dock_scan(self):
+        from module.retire.dock_scan_tool import DockScanTool
+        DockScanTool(config=self.config, device=self.device, task="DockScan").run_dock_scan(
+            do_postprocess=self.config.DockScan_PostProcess,
+            base_dir=self.config.DockScan_OutputFolder,
+        )
+
     def game_manager(self):
         from module.daemon.game_manager import GameManager
         GameManager(config=self.config, device=self.device, task="GameManager").run()

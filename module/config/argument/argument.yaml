@@ -1275,6 +1275,9 @@ Benchmark:
   TestScene:
     value: screenshot_click
     option: [screenshot_click, screenshot, click]
+DockScan:
+  PostProcess: true
+  OutputFolder: ./log/dock_scan
 AzurLaneUncensored:
   Repository:
     value: https://gitee.com/LmeSzinc/AzurLaneUncensored

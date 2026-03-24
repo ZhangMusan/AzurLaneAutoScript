@@ -13935,6 +13935,26 @@
       }
     }
   },
+  "DockScan": {
+    "DockScan": {
+      "PostProcess": {
+        "type": "checkbox",
+        "value": true
+      },
+      "OutputFolder": {
+        "type": "input",
+        "value": "./log/dock_scan"
+      }
+    },
+    "Storage": {
+      "Storage": {
+        "type": "storage",
+        "value": {},
+        "valuetype": "ignore",
+        "display": "disabled"
+      }
+    }
+  },
   "AzurLaneUncensored": {
     "AzurLaneUncensored": {
       "Repository": {

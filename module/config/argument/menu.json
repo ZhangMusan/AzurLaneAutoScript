@@ -122,6 +122,7 @@
       "BoxDisassemble",
       "Benchmark",
       "OcrBenchmark",
+      "DockScan",
       "AzurLaneUncensored",
       "GameManager"
     ]

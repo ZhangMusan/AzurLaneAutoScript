@@ -397,6 +397,8 @@ Tool:
       - Benchmark
     OcrBenchmark:
       - OcrBenchmark
+    DockScan:
+      - DockScan
     AzurLaneUncensored:
       - AzurLaneUncensored
     GameManager:
