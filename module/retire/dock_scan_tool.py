@@ -85,6 +85,7 @@ class DockScanTool(DaemonBase, Dock):
             logger.attr("Matched CSV", artifacts.get("matched_csv", ""))
             logger.attr("Unresolved CSV", artifacts.get("unresolved_csv", ""))
             logger.attr("Match Report CSV", artifacts.get("report_csv", ""))
+            logger.attr("Name Crop Dir", artifacts.get("name_crop_dir", ""))
         else:
             logger.info("Post process disabled")
 

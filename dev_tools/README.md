@@ -32,3 +32,4 @@
 - **`war_archives_update.py`**: 每当官方将以往活动加入常驻“作战档案（War Archives）”时，该脚本可一键将 ALAS 旧的活动代码挪并批量修正命名路径。
 - **`requirements_updater.py`**: 一键规范化修复 Python 依赖文件 (`requirements.txt`) 的格式，避免环境快速安装时出错。
 - **`Flatten_generator.py`**: 快速将直观的网格字符串转换为坐标拼接代码的小工具。
+- **`wiki_ship_names_fetch.py`**: 从碧蓝航线 Wiki 自动抓取舰娘名称词库并生成 `wiki_ship_names_auto.txt`（可选输出按日期归档文件），优先使用“舰队科技”列表页（可覆盖 722 条科技点舰船），供船坞扫描名称纠错使用。
