@@ -130,8 +130,12 @@ class WikiShipNamesFetcher:
                 if any(keyword in title for keyword in [
                     "Category:", "Template:", "File:", "Help:", "Special:",
                     "编辑", "讨论", "链接", "历史", "语言", "更多", "MediaWiki",
-                    "级加成"
+                    "级加成", "本次升级", "本页面", "您可以查看", "过去的版本"
                 ]):
+                    continue
+                
+                # 排除包含过多中文句号、冒号等系统文本特征的条目
+                if re.search(r'。|：|；|，\s*\[', title):
                     continue
                 
                 # 排除测试数据/占位符（META001-058, Plan001-042, T0-T4等）
@@ -255,7 +259,11 @@ class WikiShipNamesFetcher:
                         continue
                     
                     # 排除特殊关键词
-                    if any(keyword in ship_name for keyword in ["Category:", "Template:", "File:", "阵营", "分组", "编辑", "讨论"]):
+                    if any(keyword in ship_name for keyword in ["Category:", "Template:", "File:", "阵营", "分组", "编辑", "讨论", "本次升级", "本页面", "您可以查看"]):
+                        continue
+                    
+                    # 排除包含系统文本特征的条目（句号、冒号 + 方括号等）
+                    if re.search(r'。|：|；|，\s*\[', ship_name):
                         continue
                     
                     # 排除纯单个数字（但允许 22, 33 等有效舰娘名称）
@@ -362,7 +370,11 @@ class WikiShipNamesFetcher:
                             continue
                         
                         # 排除系统标签
-                        if any(keyword in title for keyword in ["级加成"]):
+                        if any(keyword in title for keyword in ["级加成", "本次升级", "本页面", "您可以查看"]):
+                            continue
+                        
+                        # 排除包含系统文本特征的条目
+                        if re.search(r'。|：|；|，\s*\[', title):
                             continue
                         
                         # 排除纯数字舰娘除了已知的（22, 33）
