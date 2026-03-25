@@ -464,6 +464,8 @@ class WikiShipNamesFetcher:
             return False
         if 'μ兵装' in name or '(μ兵装)' in name:  # 例: 大青花鱼(μ兵装)
             return False
+        if name.startswith('小'):  # 例: 小海伦娜, 小大凤 (META版本的别称)
+            return False
         
         return True
 
