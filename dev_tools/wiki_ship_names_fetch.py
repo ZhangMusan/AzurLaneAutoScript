@@ -455,16 +455,12 @@ class WikiShipNamesFetcher:
     def _should_include(self, name: str) -> bool:
         """
         检查舰娘名称是否应该被包含在库中
-        排除变种名称（应该由 OCR 层处理）
+        只排除历史版本（.改），其他变种（μ兵装、·META、小*）都是游戏中的真实舰娘
         """
         name = name.strip()
         
-        # 排除变种名称
-        if '·META' in name:  # 例: U-556·META, 龙骑兵·META
-            return False
-        if 'μ兵装' in name or '(μ兵装)' in name:  # 例: 大青花鱼(μ兵装)
-            return False
-        if name.startswith('小'):  # 例: 小海伦娜, 小大凤 (META版本的别称)
+        # 只排除历史版本
+        if name.endswith('.改') or name.endswith('-改'):  # 例: 舰娘.改, 舰娘-改
             return False
         
         return True
