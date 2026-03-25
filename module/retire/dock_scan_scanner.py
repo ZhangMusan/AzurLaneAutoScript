@@ -33,7 +33,7 @@ from module.retire.scanner import (
 )
 
 
-CARD_NAME_GRIDS = CARD_GRIDS.crop(area=(8, 160, 130, 184), name="NAME")
+CARD_NAME_GRIDS = CARD_GRIDS.crop(area=(4, 160, 134, 186), name="NAME")
 
 
 @dataclass(frozen=True)
