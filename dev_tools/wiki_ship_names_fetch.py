@@ -37,8 +37,9 @@ class WikiShipNamesFetcher:
 
     # Wiki 主要链接（中文 Wiki）
     WIKI_BASE_URL = "https://wiki.biligame.com/blhx"
-    
-    # 舰队科技页面 - 包含所有可用的可建造舰船（722+ 条）
+        # 舰船图鉴页面 - 包含所有舰娘（含无科技点的）
+    SHIP_INDEX_PAGE = "舰船图鉴"
+        # 舰队科技页面 - 包含所有可用的可建造舰船（722+ 条）
     FLEET_TECH_PAGE = "舰队科技"
     
     # 备用方案：全部舰娘分类页
@@ -50,20 +51,98 @@ class WikiShipNamesFetcher:
         self.ship_names: Set[str] = set()
 
     def _create_session(self) -> requests.Session:
-        """创建带重试机制的 requests Session"""
+        """创建带重试机制和完整请求头的 requests Session"""
         session = requests.Session()
         retry_strategy = Retry(
             total=3,
             backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
+            status_forcelist=[429, 500, 502, 503, 504, 567],
         )
         adapter = HTTPAdapter(max_retries=retry_strategy)
         session.mount("http://", adapter)
         session.mount("https://", adapter)
         session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Accept-Encoding": "gzip, deflate, br",
+            "DNT": "1",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
         })
         return session
+
+    def fetch_from_ship_index_page(self) -> int:
+        """
+        从"舰船图鉴"页面抓取舰娘名称（849+ 条，包含所有舰娘）
+        
+        Returns:
+            int: 新增的舰娘数量
+        """
+        print(f"[INFO] 正在从舰船图鉴页面获取舰娘名称...")
+        try:
+            # 构建 Wiki 页面 URL
+            page_title = self.SHIP_INDEX_PAGE
+            url = f"{self.WIKI_BASE_URL}/{quote(page_title)}"
+            
+            response = self.session.get(url, timeout=self.timeout)
+            response.encoding = 'utf-8'
+            
+            if response.status_code != 200:
+                print(f"[WARN] 舰船图鉴页面请求失败 (status={response.status_code})")
+                return 0
+            
+            html = response.text
+            before_count = len(self.ship_names)
+            
+            # 从 HTML 中直接提取所有 title 属性
+            ship_titles = self._extract_ships_from_page_titles(html)
+            
+            self.ship_names.update(ship_titles)
+            added = len(self.ship_names) - before_count
+            
+            print(f"[OK] 舰船图鉴页面：新增 {added} 个舰娘")
+            return added
+
+        except Exception as e:
+            print(f"[ERROR] 获取舰船图鉴页面失败: {e}")
+            return 0
+    
+    def _extract_ships_from_page_titles(self, html: str) -> Set[str]:
+        """
+        从 HTML 中提取所有 <a> 标签的 title 属性作为舰娘名称
+        """
+        ships = set()
+        
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # 查找所有带 title 属性的链接
+            all_links = soup.find_all('a', attrs={'title': True})
+            
+            for link in all_links:
+                title = link.get('title', '').strip()
+                
+                if not title:
+                    continue
+                
+                # 排除特殊的 title（分类、模板等）
+                if any(keyword in title for keyword in [
+                    "Category:", "Template:", "File:", "Help:", "Special:",
+                    "编辑", "讨论", "链接", "历史", "语言", "更多", "MediaWiki"
+                ]):
+                    continue
+                
+                # 只保留合理长度的标题
+                if 1 <= len(title) <= 80:
+                    ships.add(title)
+            
+            print(f"[DEBUG] 从舰船图鉴页面提取了 {len(ships)} 个舰娘")
+            
+        except Exception as e:
+            print(f"[WARN] 舰船图鉴解析失败: {e}")
+        
+        return ships
 
     def fetch_from_fleet_tech_page(self) -> int:
         """
@@ -361,10 +440,13 @@ class WikiShipNamesFetcher:
         print("[INFO] 开始抓取舰娘名称...")
         print(f"[INFO] Wiki 地址: {self.WIKI_BASE_URL}")
         
-        # 优先使用舰队科技页面（应该有 722 个舰娘）
+        # 优先使用舰船图鉴页面（最完整，有 849 个舰娘）
+        ship_index_count = self.fetch_from_ship_index_page()
+        
+        # 使用舰队科技页面补充（如果舰船图鉴页面失败或缺漏）
         fleet_tech_count = self.fetch_from_fleet_tech_page()
         
-        # 无论舰队科技页面结果如何，都使用分类 API 补充
+        # 无论前两者结果如何，都使用分类 API 补充
         # 这确保我们能获取到所有的舰娘
         print("[INFO] 使用分类 API 补充舰娘数据...")
         self.fetch_from_category()
@@ -374,8 +456,10 @@ class WikiShipNamesFetcher:
             return False
         
         print(f"\n[INFO] 总计获取 {len(self.ship_names)} 个舰娘")
+        print(f"[INFO]   - 舰船图鉴页面: {ship_index_count} 个")
         print(f"[INFO]   - 舰队科技页面: {fleet_tech_count} 个")
-        print(f"[INFO]   - 分类 API: {len(self.ship_names) - fleet_tech_count} 个")
+        print(f"[INFO]   - 分类 API: {len(self.ship_names) - ship_index_count - fleet_tech_count} 个 (可能有重复)")
+
         
         # 确定输出路径
         script_dir = Path(__file__).parent
