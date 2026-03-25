@@ -142,11 +142,9 @@ class WikiShipNamesFetcher:
                 ]):
                     continue
                 
-                # 只保留合理长度的标题（排除太短的）
+                # 只保留合理长度的标题
                 if 1 <= len(title) <= 80 and len(title.strip()) > 0:
-                    # 排除只包含数字和特殊符号的短标签
-                    if re.search(r'[a-zA-Z\u4e00-\u9fff★●○■□△▲↓]', title):
-                        ships.add(title)
+                    ships.add(title)
             
             print(f"[DEBUG] 从舰船图鉴页面提取了 {len(ships)} 个舰娘")
             
@@ -260,8 +258,14 @@ class WikiShipNamesFetcher:
                     if any(keyword in ship_name for keyword in ["Category:", "Template:", "File:", "阵营", "分组", "编辑", "讨论"]):
                         continue
                     
-                    # 排除纯数字但太短的名称（如 "004" 这类非舰娘编号）
-                    if ship_name.isdigit() and len(ship_name) <= 3:
+                    # 排除纯单个数字（但允许 22, 33 等有效舰娘名称）
+                    if ship_name.isdigit() and len(ship_name) == 1:
+                        continue
+                    
+                    # 排除大于等于3位的纯数字（如 100-131, 004 等）
+                    # 除非是已知的有效数字舰娘
+                    known_numeric_ships = {"22", "33"}
+                    if ship_name.isdigit() and ship_name not in known_numeric_ships:
                         continue
                     
                     # 排除测试数据/占位符（META001-058, Plan001-042, T0-T4等）
@@ -359,6 +363,11 @@ class WikiShipNamesFetcher:
                         
                         # 排除系统标签
                         if any(keyword in title for keyword in ["级加成"]):
+                            continue
+                        
+                        # 排除纯数字舰娘除了已知的（22, 33）
+                        known_numeric_ships = {"22", "33"}
+                        if title.isdigit() and title not in known_numeric_ships:
                             continue
                         
                         self.ship_names.add(title)
