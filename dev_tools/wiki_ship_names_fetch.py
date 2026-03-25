@@ -452,6 +452,21 @@ class WikiShipNamesFetcher:
         
         return ships
 
+    def _should_include(self, name: str) -> bool:
+        """
+        检查舰娘名称是否应该被包含在库中
+        排除变种名称（应该由 OCR 层处理）
+        """
+        name = name.strip()
+        
+        # 排除变种名称
+        if '·META' in name:  # 例: U-556·META, 龙骑兵·META
+            return False
+        if 'μ兵装' in name or '(μ兵装)' in name:  # 例: 大青花鱼(μ兵装)
+            return False
+        
+        return True
+
     def save_to_file(self, output_path: Path, archive: bool = False) -> bool:
         """
         保存舰娘名称到文件
@@ -468,8 +483,8 @@ class WikiShipNamesFetcher:
             return False
         
         try:
-            # 准备内容
-            sorted_names = sorted(self.ship_names)
+            # 准备内容 - 过滤掉所有变种名称
+            sorted_names = sorted(name for name in self.ship_names if self._should_include(name))
             content = "# 碧蓝航线舰娘名称词库\n"
             content += f"# 更新时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
             content += f"# 总计: {len(sorted_names)} 个舰娘\n\n"
