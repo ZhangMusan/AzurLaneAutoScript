@@ -129,13 +129,24 @@ class WikiShipNamesFetcher:
                 # 排除特殊的 title（分类、模板等）
                 if any(keyword in title for keyword in [
                     "Category:", "Template:", "File:", "Help:", "Special:",
-                    "编辑", "讨论", "链接", "历史", "语言", "更多", "MediaWiki"
+                    "编辑", "讨论", "链接", "历史", "语言", "更多", "MediaWiki",
+                    "级加成"
                 ]):
                     continue
                 
-                # 只保留合理长度的标题
-                if 1 <= len(title) <= 80:
-                    ships.add(title)
+                # 排除测试数据/占位符（META001-058, Plan001-042, T0-T4等）
+                if any(re.match(pattern, title) for pattern in [
+                    r'^META\d+$',      # META001-META999
+                    r'^Plan\d+$',      # Plan001-Plan999
+                    r'^T\d+$',         # T0-T999
+                ]):
+                    continue
+                
+                # 只保留合理长度的标题（排除太短的）
+                if 1 <= len(title) <= 80 and len(title.strip()) > 0:
+                    # 排除只包含数字和特殊符号的短标签
+                    if re.search(r'[a-zA-Z\u4e00-\u9fff★●○■□△▲↓]', title):
+                        ships.add(title)
             
             print(f"[DEBUG] 从舰船图鉴页面提取了 {len(ships)} 个舰娘")
             
@@ -242,11 +253,31 @@ class WikiShipNamesFetcher:
                     ship_name = ship_name.strip()
                     
                     # 过滤掉无效的名称
-                    if ship_name and not any(keyword in ship_name for keyword in ["Category:", "Template:", "File:", "阵营", "分组", "编辑", "讨论"]):
-                        # 排除纯数字但太短的名称（如 "004" 这类非舰娘编号）
-                        if not (ship_name.isdigit() and len(ship_name) <= 3):
-                            ships.add(ship_name)
-                            table_count += 1
+                    if not ship_name:
+                        continue
+                    
+                    # 排除特殊关键词
+                    if any(keyword in ship_name for keyword in ["Category:", "Template:", "File:", "阵营", "分组", "编辑", "讨论"]):
+                        continue
+                    
+                    # 排除纯数字但太短的名称（如 "004" 这类非舰娘编号）
+                    if ship_name.isdigit() and len(ship_name) <= 3:
+                        continue
+                    
+                    # 排除测试数据/占位符（META001-058, Plan001-042, T0-T4等）
+                    if any(re.match(pattern, ship_name) for pattern in [
+                        r'^META\d+$',      # META001-META999
+                        r'^Plan\d+$',      # Plan001-Plan999
+                        r'^T\d+$',         # T0-T999
+                    ]):
+                        continue
+                    
+                    # 排除系统标签
+                    if any(keyword in ship_name for keyword in ["级加成"]):
+                        continue
+                    
+                    ships.add(ship_name)
+                    table_count += 1
                 
                 if table_count > 0:
                     print(f"[DEBUG] 舰队科技表格 {table_idx}: 提取 {table_count} 个舰娘")
@@ -315,9 +346,23 @@ class WikiShipNamesFetcher:
                     # 提取舰娘名称（过滤掉重定向等）
                     for member in members:
                         title = member.get("title", "").strip()
-                        if title and not title.startswith("Category:"):
-                            self.ship_names.add(title)
-                            category_count += 1
+                        if not title or title.startswith("Category:"):
+                            continue
+                        
+                        # 排除测试数据/占位符（META001-058, Plan001-042, T0-T4等）
+                        if any(re.match(pattern, title) for pattern in [
+                            r'^META\d+$',      # META001-META999
+                            r'^Plan\d+$',      # Plan001-Plan999
+                            r'^T\d+$',         # T0-T999
+                        ]):
+                            continue
+                        
+                        # 排除系统标签
+                        if any(keyword in title for keyword in ["级加成"]):
+                            continue
+                        
+                        self.ship_names.add(title)
+                        category_count += 1
                     
                     # 检查是否有下一页
                     if "continue" not in data:
