@@ -37,7 +37,7 @@ from module.retire.scanner import (
 )
 
 
-CARD_NAME_GRIDS = CARD_GRIDS.crop(area=(4, 160, 134, 186), name="NAME")
+CARD_NAME_GRIDS = CARD_GRIDS.crop(area=(4, 163, 134, 186), name="NAME")
 ALLOWED_NAME_RE = re.compile(r'^[\u4e00-\u9fff\u3040-\u30ffA-Za-z0-9\-\.·]+$')
 
 
@@ -88,8 +88,8 @@ class NameScanner(Scanner):
     @staticmethod
     def _normalize_for_match(name: str) -> str:
         text = (name or "").strip()
-        text = text.strip('`~_"\'“”‘’—–―‖，,。.；;：:！？!?（）()[]【】<>《》…|=^*')
-        text = re.sub(r'["\'“”‘’`~_—–―‖，,。.；;：:！？!?（）()\[\]【】<>《》…|=^*]', '', text)
+        text = text.strip('`~_"\'""''—–―‖，,。.；;：:！？!?（）()[]【】<>《》…|=^*·')
+        text = re.sub(r'["\'""''`~_—–―‖，,。.；;：:！？!?（）()\[\]【】<>《》…|=^*·]', '', text)
         text = re.sub(r'\s+', '', text)
         return text
 
@@ -100,8 +100,17 @@ class NameScanner(Scanner):
             half = len(text) // 2
             if text[:half] == text[half:]:
                 text = text[:half]
-        text = re.sub(r'\([^)]*\)', '', text)
-        text = re.sub(r'（[^）]*）', '', text)
+        
+        # 注意：不删除包含μ兵装、·META等官方变体的括号，因为这些是独立的舰娘
+        # 只删除其他类型的括号（如改造说明、别名说明等）
+        # 保存原始的括号内容，用来判断是否为官方变体
+        has_known_variants = bool(re.search(r'[（(]?[μuU][·\.\s]*兵装[）)]?|[·.]?META', text))
+        
+        if not has_known_variants:
+            # 只有非官方变体的情况下，才删除括号
+            text = re.sub(r'\([^)]*\)', '', text)
+            text = re.sub(r'（[^）]*）', '', text)
+        
         return cls._normalize_for_match(text)
 
     @staticmethod
@@ -118,6 +127,28 @@ class NameScanner(Scanner):
                 best_score = score
                 best_name = candidate
         return best_name, best_score
+
+    @staticmethod
+    def _is_more_basic_version(new_name: str, old_name: str) -> bool:
+        """
+        判断 new_name 是否比 old_name 更"基础"（优先级更高）
+        优先级：
+        1. 不包含括号的优先于包含括号的
+        2. 更短的优先于更长的（通常基础版本更短）
+        
+        注意：μ兵装、·META 等在游戏中都是独立的新舰娘，不作为"变体"对待。
+        """
+        # 统计括号数
+        new_paren_count = new_name.count('(') + new_name.count('（')
+        old_paren_count = old_name.count('(') + old_name.count('（')
+        
+        if new_paren_count < old_paren_count:
+            return True
+        if new_paren_count > old_paren_count:
+            return False
+        
+        # 括号数相同，比较长度（更短的优先）
+        return len(new_name) < len(old_name)
 
     @classmethod
     def _load_wiki_library(cls) -> Dict[str, str]:
@@ -141,7 +172,10 @@ class NameScanner(Scanner):
                 normalized = cls._normalize_wiki_name(raw)
                 if normalized:
                     # 扫描阶段直接输出 wiki 标准名，用于修正 OCR 原始结果。
-                    lib[normalized] = raw
+                    # 当同一个规范化键有多个版本时，优先保留更"基础"的版本
+                    # 例：大青花鱼 优先于 大青花鱼(μ兵装)，小海伦娜 在没有 海伦娜 时才保留
+                    if normalized not in lib or cls._is_more_basic_version(raw, lib[normalized]):
+                        lib[normalized] = raw
 
         manual = {
             '普莉茅斯': '普利茅斯',
@@ -151,8 +185,9 @@ class NameScanner(Scanner):
             '一信浓': '信浓',
             '朱丽里': '朱利奥凯撒',
             '俾斯麦Zwe': '俾斯麦Zwei',
-            '博伊西μ兵装': '博伊西',
-            '博伊西u兵装': '博伊西',
+            '博伊西μ兵装': '博伊西(μ兵装)',
+            '博伊西u兵装': '博伊西(μ兵装)',
+            '博伊西U兵装': '博伊西(μ兵装)',
         }
         for key, value in manual.items():
             lib[cls._normalize_for_match(key)] = value
@@ -167,25 +202,39 @@ class NameScanner(Scanner):
 
         candidates: List[str] = []
 
-        def add_candidate(text: str) -> None:
+        def add_candidate(text: str, priority: int = 0) -> None:
+            """
+            添加候选项。priority 值越小优先级越高（越先被检查）
+            """
             normalized = self._normalize_for_match(text)
-            if normalized and normalized not in candidates:
-                candidates.append(normalized)
+            if normalized and normalized not in [c[0] for c in candidates]:
+                candidates.append((normalized, priority))
 
-        add_candidate(raw)
-        add_candidate(self._normalize_wiki_name(raw))
-        add_candidate(raw.replace('干', '十'))
-        add_candidate(raw.replace('厂', '广'))
-        add_candidate(raw.replace('宫佐夫', '米哈伊尔'))
-        add_candidate(raw.replace('宫佐关', '米哈伊尔'))
-        add_candidate(re.sub(r'[（(]?[μuU][·\.\s]*兵装[）)]?$', '', raw))
+        # 优先级1: 删除改造后缀（只有.改、-改、~改、·改 才需要删除）
+        # μ兵装、·META 等在游戏中是独立新舰娘，不删除
+        add_candidate(re.sub(r'[·.\-~]改$', '', raw), priority=1)
+        
+        # 优先级1.5: 处理 u/U 兵装作为 μ 兵装的 OCR 误读
+        # OCR 可能将 μ 识别为 u 或 U，这里纠正为 μ
+        add_candidate(re.sub(r'([uU])[·\.\s]*兵装', r'μ兵装', raw), priority=1)
+        
+        # 优先级2: 处理"小"开头的简化舰娘
+        if raw.startswith('小') and len(raw) >= 3:
+            add_candidate(raw[1:], priority=2)
+        
+        # 优先级2: 原始输入及其变体
+        add_candidate(raw, priority=2)
+        add_candidate(self._normalize_wiki_name(raw), priority=2)
+        add_candidate(raw.replace('干', '十'), priority=2)
+        add_candidate(raw.replace('厂', '广'), priority=2)
+        add_candidate(raw.replace('宫佐夫', '米哈伊尔'), priority=2)
+        add_candidate(raw.replace('宫佐关', '米哈伊尔'), priority=2)
 
         if raw.startswith('一') and len(raw) >= 3:
-            add_candidate(raw[1:])
+            add_candidate(raw[1:], priority=2)
 
         merged = re.sub(r'[·\.\-]', '', raw)
-        add_candidate(merged)
-        add_candidate(re.sub(r'[\.-]?改$', '', raw))
+        add_candidate(merged, priority=3)
 
         # OCR 偶发将 Z20 识别为 一20/2、I20_2 等形式，这里统一回退到 Z 前缀。
         z_alias = re.fullmatch(r'[一I]?(\d{2})(?:[\/_\-]?(\d))?', re.sub(r'\s+', '', raw))
@@ -193,22 +242,27 @@ class NameScanner(Scanner):
             group2 = z_alias.group(2)
             group1 = z_alias.group(1)
             if not group2 or group2 == group1[0]:
-                add_candidate(f'Z{group1}')
+                add_candidate(f'Z{group1}', priority=3)
 
         compact = self._normalize_for_match(raw)
         if compact and len(compact) % 2 == 0:
             half = len(compact) // 2
             if compact[:half] == compact[half:]:
-                add_candidate(compact[:half])
+                add_candidate(compact[:half], priority=3)
 
-        for candidate in candidates:
+        # 按优先级排序（优先级小的先）
+        candidates.sort(key=lambda x: x[1])
+        
+        # 精确匹配阶段
+        for candidate, _ in candidates:
             upper_candidate = candidate.upper() if re.fullmatch(r'[A-Za-z0-9\-\.]+', candidate) else candidate
             if upper_candidate in self.wiki_lib:
                 return self.wiki_lib[upper_candidate]
 
+        # 模糊匹配阶段
         best_key = ''
         best_score = 0.0
-        for candidate in candidates:
+        for candidate, _ in candidates:
             query = candidate.upper() if re.fullmatch(r'[A-Za-z0-9\-\.]+', candidate) else candidate
             key, score = self._pick_best_fuzzy(query, self.wiki_keys)
             if not key:
