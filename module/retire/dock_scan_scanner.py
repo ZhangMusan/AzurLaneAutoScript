@@ -40,6 +40,14 @@ from module.retire.scanner import (
 CARD_NAME_GRIDS = CARD_GRIDS.crop(area=(4, 163, 134, 186), name="NAME")
 ALLOWED_NAME_RE = re.compile(r'^[\u4e00-\u9fff\u3040-\u30ffA-Za-z0-9\-\.·]+$')
 
+# OCR同音字误认容错表
+HOMOPHONE_CORRECTION = {
+    '茶': '茶', '材': '才', '土': '士', '门': '闷', '方': '芳',
+    '相': '湘', '乡': '香', '长': '昌', '常': '尝', '章': '张',
+    '商': '伤', '生': '声', '胜': '升', '声': '生', '升': '胜',
+    '城': '成', '成': '城', '层': '曾', '曾': '层',
+}
+
 
 @dataclass(frozen=True)
 class DockShip:
@@ -84,6 +92,17 @@ class NameScanner(Scanner):
         self.ocr_model.SHOW_LOG = False
         self.wiki_lib = self._load_wiki_library()
         self.wiki_keys = list(self.wiki_lib.keys())
+
+    @staticmethod
+    def _apply_homophone_correction(name: str) -> str:
+        """应用同音字纠正，提升识别准确率"""
+        if not name:
+            return name
+        result = name
+        for wrong_char, correct_char in HOMOPHONE_CORRECTION.items():
+            if wrong_char in result:
+                result = result.replace(wrong_char, correct_char)
+        return result
 
     @staticmethod
     def _normalize_for_match(name: str) -> str:
@@ -197,6 +216,9 @@ class NameScanner(Scanner):
 
     def match_known_name(self, name: str, level: int) -> str:
         raw = (name or '').strip()
+        # 应用同音字纠正
+        raw = self._apply_homophone_correction(raw)
+        
         if not raw or raw == 'Unknown' or not self.wiki_lib:
             return raw or 'Unknown'
 

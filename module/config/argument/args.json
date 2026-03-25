@@ -454,7 +454,7 @@
       },
       "CombatScreenshotInterval": {
         "type": "input",
-        "value": 1.0
+        "value": 1
       },
       "TaskHoardingDuration": {
         "type": "input",
@@ -8741,7 +8741,7 @@
     "Scheduler": {
       "Enable": {
         "type": "checkbox",
-        "value": false,
+        "value": true,
         "option": [
           true,
           false
@@ -8902,7 +8902,7 @@
     "Scheduler": {
       "Enable": {
         "type": "checkbox",
-        "value": false,
+        "value": true,
         "option": [
           true,
           false
@@ -9269,7 +9269,7 @@
     "Scheduler": {
       "Enable": {
         "type": "checkbox",
-        "value": false,
+        "value": true,
         "option": [
           true,
           false

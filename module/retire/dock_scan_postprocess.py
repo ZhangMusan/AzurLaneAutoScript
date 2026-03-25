@@ -17,7 +17,32 @@ from module.retire.dock_scan_scanner import NameScanner, PreparedOcr
 
 SYMBOLS = set('`~_"\'“”‘’—–―‖，,。；;：:！？!?（）()[]【】<>《》…•ˇ′=|^*')
 ALLOWED_RE = re.compile(r'^[\u4e00-\u9fff\u3040-\u30ffA-Za-z0-9\-\.·]+$')
-
+# OCR同音字误认容错表：常见的同音误字和多笔误字纠正
+# 格式：{'错误字': '正确字', ...}
+HOMOPHONE_CORRECTION = {
+    # 常见同音误字
+    '拉菲': '拉菲',  # 保留以作示例
+    '茶': '茶',      # 同音的形近字
+    '材': '才',      # 常见笔误
+    '土': '士',      # 常见笔误
+    '门': '闷',      # 同音
+    '方': '芳',      # 同音
+    '相': '湘',      # 同音
+    '乡': '香',      # 同音
+    '长': '昌',      # 同音
+    '常': '尝',      # 同音
+    '章': '张',      # 同音
+    '商': '伤',      # 同音
+    '生': '声',      # 同音
+    '胜': '升',      # 同音
+    '声': '生',      # 同音
+    '升': '胜',      # 同音  
+    '城': '成',      # 同音
+    '成': '城',      # 同音
+    '层': '曾',      # 同音
+    '曾': '层',      # 同音
+    # 可继续扩展
+}
 _RESCAN_OCR_CACHE: Dict[str, PreparedOcr] = {}
 _RESCAN_OCR_CACHE_MAX = 16
 
@@ -44,6 +69,21 @@ def _normalize_for_match(name: str) -> str:
     text = re.sub(r'\s+', '', text)
     return text
 
+def _apply_homophone_correction(name: str) -> str:
+    """
+    应用同音字和多笔字纠正，提升已知舰娘的匹配率。
+    对识别结果中的常见OCR误字进行纠正。
+    """
+    if not name:
+        return name
+    
+    # 单个字符级别的纠正
+    result = name
+    for wrong_char, correct_char in HOMOPHONE_CORRECTION.items():
+        if wrong_char in result and len(wrong_char) == 1:
+            result = result.replace(wrong_char, correct_char)
+    
+    return result
 
 def _normalize_wiki_name(name: str) -> str:
     s = (name or "").strip()
@@ -81,6 +121,9 @@ def _pick_best_fuzzy(target: str, candidates: List[str]) -> Tuple[str, float]:
 
 def _rescan_vote_match(name: str, level: int, wiki_lib: Dict[str, str], wiki_keys: List[str]) -> Tuple[str, str, float]:
     raw = (name or "").strip()
+    # 应用同音字和多笔字纠正，提升匹配率
+    raw_corrected = _apply_homophone_correction(raw)
+    
     candidates: List[str] = []
 
     def add_candidate(text: str) -> None:
@@ -88,11 +131,12 @@ def _rescan_vote_match(name: str, level: int, wiki_lib: Dict[str, str], wiki_key
         if t and t not in candidates:
             candidates.append(t)
 
-    add_candidate(raw)
-    add_candidate(_normalize_wiki_name(raw))
-    add_candidate(raw.replace('干', '十'))
-    add_candidate(raw.replace('厂', '广'))
-    add_candidate(raw.replace('宫佐夫', '米哈伊尔'))
+    # 使用纠正后的原始值作为第一个候选
+    add_candidate(raw_corrected)
+    add_candidate(_normalize_wiki_name(raw_corrected))
+    add_candidate(raw_corrected.replace('干', '十'))
+    add_candidate(raw_corrected.replace('厂', '广'))
+    add_candidate(raw_corrected.replace('宫佐夫', '米哈伊尔'))
     add_candidate(raw.replace('宫佐关', '米哈伊尔'))
     add_candidate(re.sub(r'[（(]?[μuU][·\.\s]*兵装[）)]?$', '', raw))
 
@@ -386,20 +430,23 @@ def process_dock_scan_result(ships: list, base_dir: str = '.') -> Dict[str, str]
         rarity = (row['rarity'] or '').strip()
         level_int = int(level or 0)
 
-        final_name = name
-        polluted = _has_residual_symbol(name)
-        normalized = _normalize_for_match(name)
+        # 应用同音字和多笔字纠正，提升匹配率
+        name_corrected = _apply_homophone_correction(name)
+        
+        final_name = name_corrected
+        polluted = _has_residual_symbol(name_corrected)
+        normalized = _normalize_for_match(name_corrected)
         method = 'clean'
         score = ''
 
         if polluted:
             symbol_rows += 1
 
-        if name not in ('Unknown', ''):
+        if name_corrected not in ('Unknown', ''):
             # 优先使用 wiki 标准名回填，确保 OCR 输出统一到实际舰娘名称。
             if normalized in wiki_lib:
                 final_name = wiki_lib[normalized]
-                if final_name != name:
+                if final_name != name_corrected:
                     method = 'wiki_exact'
                     score = '1.0'
                     clean_fixed_rows += 1
@@ -413,19 +460,19 @@ def process_dock_scan_result(ships: list, base_dir: str = '.') -> Dict[str, str]
                     wiki_lib=wiki_lib,
                     wiki_keys=wiki_keys,
                 )
-                if ocr_method in ('rescan_ocr', 'rescan_ocr_exact') and ocr_name and ocr_name != name:
+                if ocr_method in ('rescan_ocr', 'rescan_ocr_exact') and ocr_name and ocr_name != name_corrected:
                     final_name = ocr_name
                     method = ocr_method
                     score = f'{ocr_score:.4f}'
                     rescan_fixed_rows += 1
                 else:
                     voted_name, voted_method, voted_score = _rescan_vote_match(
-                        name=name,
+                        name=name_corrected,
                         level=level_int,
                         wiki_lib=wiki_lib,
                         wiki_keys=wiki_keys,
                     )
-                    if voted_method in ('rescan_vote', 'rescan_vote_exact', 'rescan_vote_loose') and voted_name and voted_name != name:
+                    if voted_method in ('rescan_vote', 'rescan_vote_exact', 'rescan_vote_loose') and voted_name and voted_name != name_corrected:
                         final_name = voted_name
                         method = voted_method
                         score = f'{voted_score:.4f}' if voted_score else ''
@@ -440,13 +487,13 @@ def process_dock_scan_result(ships: list, base_dir: str = '.') -> Dict[str, str]
             unresolved_rows.append(
                 {
                     'index': idx,
-                    'before': name,
+                    'before': name_corrected,
                     'level': level,
                     'rarity': rarity,
                 }
             )
 
-        if final_name != name:
+        if final_name != name_corrected:
             fixed_rows += 1
 
         matched_rows.append(
@@ -462,7 +509,7 @@ def process_dock_scan_result(ships: list, base_dir: str = '.') -> Dict[str, str]
             report_rows.append(
                 {
                     'index': idx,
-                    'before': name,
+                    'before': name_corrected,
                     'after': final_name,
                     'method': method,
                     'score': score,
