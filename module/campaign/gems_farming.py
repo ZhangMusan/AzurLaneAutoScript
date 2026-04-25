@@ -346,7 +346,7 @@ class GemsFarming(CampaignRun, FleetEquipment, GemsEquipmentHandler, Retirement)
         self.dock_favourite_set(False, wait_loading=False)
         self.dock_sort_method_dsc_set(False, wait_loading=False)
         self.dock_filter_set(
-            index='cv', rarity='common', faction=faction, extra=extra, sort='total')
+            index='cv', rarity='common', faction=faction, extra=extra, sort='level')
 
         logger.hr('FINDING FLAGSHIP')
 
@@ -358,7 +358,7 @@ class GemsFarming(CampaignRun, FleetEquipment, GemsEquipmentHandler, Retirement)
             min_level = max_level
         else:
             max_level = lv
-            min_level = 1
+            min_level = 0
         emotion_lower_bound = 0 if emotion == 0 else self.emotion_lower_bound
         fleet = [0, self.fleet_to_attack] if self.config.GemsFarming_ALLowHighFlagshipLevel else self.fleet_to_attack
         scanner = ShipScanner(
@@ -455,6 +455,11 @@ class GemsFarming(CampaignRun, FleetEquipment, GemsEquipmentHandler, Retirement)
                 min_level = max_level
             if self.hard_mode:
                 min_level = max(min_level, 70)
+        # LevelOcr returns 0 for high-emotion ships due to card visual effects causing
+        # 'L' character detection failure. Set min_level to 0 so OCR failures don't
+        # incorrectly filter out valid ships.
+        if min_level <= 1:
+            min_level = 0
         emotion_lower_bound = 0 if emotion == 0 else self.emotion_lower_bound
         scanner = ShipScanner(level=(min_level, max_level), emotion=(emotion_lower_bound, 150),
                               fleet=[0, self.fleet_to_attack], status='free')
